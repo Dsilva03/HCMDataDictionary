@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Chosen Palette: Warm Sandstone -->
     <!-- Application Structure Plan: A tab-based, single-page application. A persistent header contains the title and a live search bar. Below, a navigation bar with pill-style buttons allows users to select an HCM module (e.g., Core HR, Payroll). The main content area dynamically displays the data dictionary table for the currently selected module. This structure was chosen because it breaks down the large, complex data dictionary into manageable, thematic sections, which is intuitive for users familiar with HCM's modular structure. It prevents overwhelming the user with a single, massive table and makes finding information faster. The user flow is: land on page -> see default 'Core HR' table -> click another module tab to switch tables -> use search bar to instantly filter rows within the active table. -->
-    <!-- Visualization & Content Choices: Report Info (HCM Data Dictionary Tables) -> Goal (Organize, Inform, Search, Edit) -> Viz/Presentation Method (Styled HTML Tables with Modal Form) -> Interaction (Tab Navigation to switch between module tables; Live search input to filter table rows dynamically; "Add New Field" button to open modal for creation; "Edit" and "Delete" buttons per row to modify or remove entries via a modal for editing and direct deletion) -> Justification (Tables are optimal for dictionary data. Tabs and search provide efficient navigation. The modal pattern for adding/editing keeps the interface clean and focused for data input/modification. Direct delete offers quick removal. All interactions enhance usability and support dynamic content management.) -> Library/Method (Vanilla JS for interactions, Tailwind CSS for styling). -->
+    <!-- Visualization & Content Choices: Report Info (HCM Data Dictionary Tables) -> Goal (Organize, Inform, Search, Edit, Export) -> Viz/Presentation Method (Styled HTML Tables with Modal Form; CSV export for data download) -> Interaction (Tab Navigation to switch between module tables; Live search input to filter table rows dynamically; "Add New Field" button to open modal for creation; "Edit" and "Delete" buttons per row to modify or remove entries via a modal for editing and direct deletion; "Export to Excel" button to download current module data as CSV) -> Justification (Tables are optimal for dictionary data. Tabs and search provide efficient navigation. The modal pattern for adding/editing keeps the interface clean and focused for data input/modification. Direct delete offers quick removal. CSV export provides a universally compatible format for data sharing and further analysis in spreadsheet software like Excel. All interactions enhance usability and support dynamic content management.) -> Library/Method (Vanilla JS for interactions, Tailwind CSS for styling). -->
     <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
     <style>
         body {
@@ -64,7 +64,7 @@
         <header class="text-center mb-8">
             <h1 class="text-3xl md:text-4xl font-bold text-slate-900">Interactive Oracle HCM Data Dictionary</h1>
             <p class="mt-2 text-slate-600 max-w-2xl mx-auto">
-                Explore key data fields across Oracle HCM Cloud. Use the tabs to switch between modules and the search bar to instantly filter fields by name or definition within the selected module. You can now also add new fields or edit/delete existing ones.
+                Explore key data fields across Oracle HCM Cloud. Use the tabs to switch between modules and the search bar to instantly filter fields by name or definition within the selected module. You can now also add new fields or edit/delete existing ones. All changes are saved instantly in your browser.
             </p>
         </header>
 
@@ -78,9 +78,12 @@
                         </svg>
                     </div>
                 </div>
-                <div class="flex justify-center mb-4">
+                <div class="flex flex-wrap justify-center gap-4 mb-4">
                     <button id="addFieldButton" class="px-6 py-2 bg-emerald-600 text-white font-semibold rounded-lg shadow hover:bg-emerald-700 transition-colors duration-200">
                         Add New Field
+                    </button>
+                    <button id="exportExcelButton" class="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow hover:bg-indigo-700 transition-colors duration-200">
+                        Export to Excel
                     </button>
                 </div>
                 <nav id="module-nav" class="mt-4 flex flex-wrap justify-center gap-2">
@@ -122,7 +125,7 @@
     </div>
 
     <script>
-        let hcmData = {
+        const DEFAULT_HCM_DATA = {
             "Core HR (Global HR)": [
                 { field: "Person Number", definition: "Unique identifier for an individual in the system.", values: "System-generated numeric or alphanumeric string (e.g., `10001`, `EMP005`)." },
                 { field: "Legal Employer", definition: "The legal entity that employs the worker.", values: "Company names (e.g., `Acme Corporation`, `Global Solutions Inc.`)." },
@@ -183,6 +186,15 @@
                 { field: "Completion Date", definition: "The date the worker completed the learning item.", values: "`YYYY-MM-DD`." },
                 { field: "Learning Assignment", definition: "A specific instance of a course assigned to a worker.", values: "System-generated ID or descriptive name." }
             ],
+            "Recruiting": [
+                { field: "Requisition Number", definition: "Unique identifier for a job opening.", values: "System-generated numeric or alphanumeric string (e.g., `REQ001`, `JR-2024-005`)." },
+                { field: "Job Posting Title", definition: "The official title of the job as advertised.", values: "`Senior Software Engineer`, `Marketing Specialist`, `HR Business Partner`." },
+                { field: "Candidate Name", definition: "The name of the applicant for a position.", values: "Full name of the candidate (e.g., `Alice Wonderland`)." },
+                { field: "Application Status", definition: "The current status of a candidate's application.", values: "`Applied`, `In Review`, `Interviewing`, `Offer Extended`, `Hired`, `Rejected`, `Withdrawn`." },
+                { field: "Interview Date", definition: "The scheduled date for a candidate's interview.", values: "`YYYY-MM-DD` (e.g., `2024-07-10`)." },
+                { field: "Recruiter Name", definition: "The name of the recruiter managing the requisition/candidate.", values: "Full name of the recruiter (e.g., `Bob Johnson`)." },
+                { field: "Source", definition: "How the candidate was identified or found.", values: "`LinkedIn`, `Referral`, `Career Fair`, `Company Website`, `Agency`." }
+            ],
             "Payroll": [
                 { field: "Payroll Unit", definition: "The specific payroll run or frequency.", values: "`Bi-Weekly`, `Monthly`, `Semi-Monthly`." },
                 { field: "Payroll Period", definition: "The start and end dates of a specific payroll run.", values: "`2024-06-01 to 2024-06-15`." },
@@ -195,15 +207,39 @@
                 { field: "Bank Account Number", definition: "The worker's bank account number for direct deposit.", values: "Numeric string." },
                 { field: "Routing Number", definition: "The bank's routing number for direct deposit.", values: "Numeric string." },
                 { field: "Tax Filing Status", definition: "The worker's tax filing status.", values: "`Single`, `Married Filing Jointly`, `Head of Household`." },
-                { field: "Tax Withholding Allowances", definition: "The number of allowances claimed for tax withholding.", values: "Numeric value (e.g., `0`, `1`, `2`)." }
+                { field: "Tax Withholding Allowances", values: "The number of allowances claimed for tax withholding.", values: "Numeric value (e.g., `0`, `1`, `2`)." }
             ]
         };
+
+        // Load data from local storage, or use default if none exists
+        let hcmData;
+        try {
+            const storedData = localStorage.getItem('hcmData');
+            if (storedData) {
+                hcmData = JSON.parse(storedData);
+            } else {
+                hcmData = DEFAULT_HCM_DATA;
+            }
+        } catch (e) {
+            console.error("Error loading data from local storage, using default data:", e);
+            hcmData = DEFAULT_HCM_DATA;
+        }
+
+        // Function to save data to local storage
+        function saveDataToLocalStorage() {
+            try {
+                localStorage.setItem('hcmData', JSON.stringify(hcmData));
+            } catch (e) {
+                console.error("Error saving data to local storage:", e);
+            }
+        }
 
         document.addEventListener('DOMContentLoaded', () => {
             const navContainer = document.getElementById('module-nav');
             const contentContainer = document.getElementById('content-container');
             const searchInput = document.getElementById('searchInput');
             const addFieldButton = document.getElementById('addFieldButton');
+            const exportExcelButton = document.getElementById('exportExcelButton'); // New export button
             const fieldModal = document.getElementById('fieldModal');
             const modalTitle = document.getElementById('modalTitle');
             const fieldForm = document.getElementById('fieldForm');
@@ -349,6 +385,7 @@
                     // Add new field
                     hcmData[activeModule].push(newField);
                 }
+                saveDataToLocalStorage(); // Save changes
                 closeModal();
                 render();
                 handleSearch(); // Reapply search filter
@@ -357,8 +394,44 @@
             function deleteField(index) {
                 if (confirm('Are you sure you want to delete this field?')) {
                     hcmData[activeModule].splice(index, 1);
+                    saveDataToLocalStorage(); // Save changes
                     render();
                     handleSearch(); // Reapply search filter
+                }
+            }
+
+            function exportToCsv() {
+                const moduleData = hcmData[activeModule];
+                if (!moduleData || moduleData.length === 0) {
+                    alert('No data to export in the current module.');
+                    return;
+                }
+
+                let csvContent = "Field Name,Definition,\"Possible Values / Examples\"\n"; // Header row
+
+                moduleData.forEach(row => {
+                    const field = `"${row.field.replace(/"/g, '""')}"`; // Escape double quotes
+                    const definition = `"${row.definition.replace(/"/g, '""')}"`;
+                    const values = `"${row.values.replace(/"/g, '""')}"`;
+                    csvContent += `${field},${definition},${values}\n`;
+                });
+
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                if (link.download !== undefined) { // Feature detection for download attribute
+                    const url = URL.createObjectURL(blob);
+                    link.setAttribute('href', url);
+                    link.setAttribute('download', `${activeModule.replace(/ /g, '_').toLowerCase()}_data_dictionary.csv`);
+                    link.style.visibility = 'hidden';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                } else {
+                    // Fallback for browsers that don't support download attribute (e.g., IE)
+                    // This uses document.execCommand('copy') but for download, a server-side solution or a different library is usually needed.
+                    // For simplicity, we'll indicate it might not work in older browsers.
+                    alert("Your browser does not support direct download. Please copy the content manually.");
                 }
             }
 
@@ -366,6 +439,7 @@
             navContainer.addEventListener('click', handleNavClick);
             searchInput.addEventListener('keyup', handleSearch);
             addFieldButton.addEventListener('click', () => openModal(false));
+            exportExcelButton.addEventListener('click', exportToCsv); // New event listener for export
             cancelModalButton.addEventListener('click', closeModal);
             fieldForm.addEventListener('submit', saveField);
 
