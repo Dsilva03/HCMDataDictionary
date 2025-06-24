@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Oracle HCM Data Dictionary</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chosen Palette: Warm Sandstone -->
+    <!-- Application Structure Plan: A tab-based, single-page application. A persistent header contains the title and a live search bar. Below, a navigation bar with pill-style buttons allows users to select an HCM module (e.g., Core HR, Payroll). The main content area dynamically displays the data dictionary table for the currently selected module. This structure was chosen because it breaks down the large, complex data dictionary into manageable, thematic sections, which is intuitive for users familiar with HCM's modular structure. It prevents overwhelming the user with a single, massive table and makes finding information faster. The user flow is: land on page -> see default 'Core HR' table -> click another module tab to switch tables -> use search bar to instantly filter rows within the active table. -->
+    <!-- Visualization & Content Choices: Report Info (HCM Data Dictionary Tables) -> Goal (Organize, Inform, Search, Edit) -> Viz/Presentation Method (Styled HTML Tables with Modal Form) -> Interaction (Tab Navigation to switch between module tables; Live search input to filter table rows dynamically; "Add New Field" button to open modal for creation; "Edit" and "Delete" buttons per row to modify or remove entries via a modal for editing and direct deletion) -> Justification (Tables are optimal for dictionary data. Tabs and search provide efficient navigation. The modal pattern for adding/editing keeps the interface clean and focused for data input/modification. Direct delete offers quick removal. All interactions enhance usability and support dynamic content management.) -> Library/Method (Vanilla JS for interactions, Tailwind CSS for styling). -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Style for the table to ensure clean, readable layout */
+        .data-table th, .data-table td {
+            padding: 12px 16px;
+            vertical-align: top; /* Align content to the top */
+        }
+        .data-table thead th {
+            position: sticky;
+            top: 0;
+            background-color: #f1f5f9; /* slate-100 */
+        }
+         /* Custom scrollbar for better aesthetics */
+        .table-container::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        .table-container::-webkit-scrollbar-track {
+            background: #f1f5f9; /* slate-100 */
+        }
+        .table-container::-webkit-scrollbar-thumb {
+            background: #cbd5e1; /* slate-300 */
+            border-radius: 4px;
+        }
+        .table-container::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; /* slate-400 */
+        }
+
+        /* Modal specific styles */
+        .modal-overlay {
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+        .modal-content {
+            max-width: 90%;
+            width: 500px;
+        }
+        @media (min-width: 768px) {
+            .modal-content {
+                max-width: 600px;
+            }
+        }
+    </style>
+     <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="bg-slate-50 text-slate-800">
+
+    <div class="container mx-auto p-4 md:p-8">
+
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-slate-900">Interactive Oracle HCM Data Dictionary</h1>
+            <p class="mt-2 text-slate-600 max-w-2xl mx-auto">
+                Explore key data fields across Oracle HCM Cloud. Use the tabs to switch between modules and the search bar to instantly filter fields by name or definition within the selected module. You can now also add new fields or edit/delete existing ones.
+            </p>
+        </header>
+
+        <div class="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-20 py-4 mb-6">
+            <div class="max-w-4xl mx-auto">
+                 <div class="relative mb-4">
+                    <input type="search" id="searchInput" placeholder="Search in the current module..." class="w-full p-3 pl-10 text-md border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition-shadow">
+                    <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                         <svg class="w-5 h-5 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                        </svg>
+                    </div>
+                </div>
+                <div class="flex justify-center mb-4">
+                    <button id="addFieldButton" class="px-6 py-2 bg-emerald-600 text-white font-semibold rounded-lg shadow hover:bg-emerald-700 transition-colors duration-200">
+                        Add New Field
+                    </button>
+                </div>
+                <nav id="module-nav" class="mt-4 flex flex-wrap justify-center gap-2">
+                    <!-- Nav buttons will be injected here -->
+                </nav>
+            </div>
+        </div>
+
+        <main id="content-container" class="max-w-7xl mx-auto">
+            <!-- Content tables will be injected here -->
+        </main>
+
+    </div>
+
+    <!-- Edit/Add Field Modal -->
+    <div id="fieldModal" class="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center p-4 z-50 hidden modal-overlay">
+        <div class="bg-white rounded-lg shadow-xl p-6 modal-content">
+            <h2 id="modalTitle" class="text-2xl font-bold mb-4 text-slate-800">Add New Field</h2>
+            <form id="fieldForm">
+                <input type="hidden" id="editIndex">
+                <div class="mb-4">
+                    <label for="fieldName" class="block text-sm font-medium text-slate-700 mb-1">Field Name</label>
+                    <input type="text" id="fieldName" class="w-full p-2 border border-slate-300 rounded-md focus:ring-sky-500 focus:border-sky-500" required>
+                </div>
+                <div class="mb-4">
+                    <label for="fieldDefinition" class="block text-sm font-medium text-slate-700 mb-1">Definition</label>
+                    <textarea id="fieldDefinition" rows="3" class="w-full p-2 border border-slate-300 rounded-md focus:ring-sky-500 focus:border-sky-500" required></textarea>
+                </div>
+                <div class="mb-6">
+                    <label for="fieldValues" class="block text-sm font-medium text-slate-700 mb-1">Possible Values / Examples</label>
+                    <textarea id="fieldValues" rows="3" class="w-full p-2 border border-slate-300 rounded-md focus:ring-sky-500 focus:border-sky-500"></textarea>
+                </div>
+                <div class="flex justify-end gap-3">
+                    <button type="button" id="cancelModalButton" class="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors duration-200">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-sky-600 text-white rounded-lg shadow hover:bg-sky-700 transition-colors duration-200">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let hcmData = {
+            "Core HR (Global HR)": [
+                { field: "Person Number", definition: "Unique identifier for an individual in the system.", values: "System-generated numeric or alphanumeric string (e.g., `10001`, `EMP005`)." },
+                { field: "Legal Employer", definition: "The legal entity that employs the worker.", values: "Company names (e.g., `Acme Corporation`, `Global Solutions Inc.`)." },
+                { field: "Business Unit", definition: "An organizational unit used for business transactions and reporting.", values: "Department names, cost centers (e.g., `Sales BU`, `HR Services`, `Finance`)." },
+                { field: "Department", definition: "The organizational unit where the worker is assigned.", values: "Specific department names (e.g., `Marketing`, `Engineering`, `Human Resources`)." },
+                { field: "Job", definition: "The role or position a person holds within the organization.", values: "Job titles (e.g., `Software Engineer`, `HR Manager`, `Financial Analyst`)." },
+                { field: "Position", definition: "A specific instance of a job within a department, often with a fixed headcount.", values: "Specific position titles (e.g., `Senior Software Engineer - Team A`, `HR Business Partner - East Region`)." },
+                { field: "Grade", definition: "A classification used to group jobs with similar levels of responsibility and pay.", values: "Numeric or alphanumeric codes (e.g., `G1`, `Band C`, `Executive`)." },
+                { field: "Location", definition: "The physical address where the worker is primarily based.", values: "City, Country, or specific office names (e.g., `New York, USA`, `London Office`, `Remote`)." },
+                { field: "Worker Type", definition: "Categorization of the worker's employment relationship.", values: "`Employee`, `Contingent Worker`, `Nonworker`, `Pensioner`." },
+                { field: "Assignment Status", definition: "The current status of the worker's assignment.", values: "`Active - Payroll Eligible`, `Active - No Payroll`, `Suspended - Payroll Eligible`, `Terminated`, `Leave of Absence`." },
+                { field: "Hire Date", definition: "The date the worker started their current employment with the legal employer.", values: "`YYYY-MM-DD` (e.g., `2020-01-15`)." },
+                { field: "Date of Birth", definition: "The worker's date of birth.", values: "`YYYY-MM-DD` (e.g., `1985-06-20`)." },
+                { field: "Gender", definition: "The worker's gender.", values: "`Male`, `Female`, `Other`, `Not Specified`." },
+                { field: "National Identifier", definition: "Government-issued identification number (e.g., Social Security Number, National Insurance Number).", values: "Numeric or alphanumeric string (e.g., `XXX-XX-XXXX`, `AA123456C`)." },
+                { field: "Marital Status", definition: "The worker's marital status.", values: "`Single`, `Married`, `Divorced`, `Widowed`, `Legally Separated`, `Domestic Partner`." },
+                { field: "Manager Name", definition: "The name of the worker's direct manager.", values: "Full name of the manager (e.g., `John Doe`)." },
+                { field: "Work Email", definition: "The worker's official company email address.", values: "`name.surname@company.com`." }
+            ],
+            "Absence Management": [
+                { field: "Absence Type", definition: "The specific type of absence taken by the worker.", values: "`Vacation`, `Sick Leave`, `Maternity Leave`, `Bereavement Leave`, `Jury Duty`." },
+                { field: "Absence Reason", definition: "A more detailed reason for the absence.", values: "For Sick Leave: `Personal Illness`, `Child Care`. For Vacation: `Relaxation`, `Family Trip`." },
+                { field: "Start Date", definition: "The date the absence period begins.", values: "`YYYY-MM-DD`." },
+                { field: "End Date", definition: "The date the absence period ends.", values: "`YYYY-MM-DD`." },
+                { field: "Duration", definition: "The total length of the absence, typically in days or hours.", values: "`5 days`, `40 hours`." },
+                { field: "Status", definition: "The current processing status of the absence request.", values: "`Submitted`, `Approved`, `Rejected`, `Withdrawn`, `Pending Approval`." },
+                { field: "Accrual Balance", definition: "The remaining balance of an absence plan (e.g., vacation days).", values: "Numeric value (e.g., `15.5`)." },
+                { field: "Plan Name", definition: "The name of the absence plan to which the worker is enrolled.", values: "`Annual Leave Plan`, `Sick Leave Plan`, `Bereavement Policy`." }
+            ],
+            "Benefits": [
+                { field: "Benefit Program", definition: "The overall program under which benefits are offered.", values: "`US Benefits 2024`, `Global Health Plan`." },
+                { field: "Benefit Plan", definition: "A specific benefit offering within a program.", values: "`Medical PPO`, `Dental HMO`, `Vision Plan`, `401K Savings`." },
+                { field: "Enrollment Status", definition: "The worker's current enrollment status in a benefit plan.", values: "`Enrolled`, `Waived`, `Eligible`, `Ineligible`." },
+                { field: "Coverage Level", definition: "The level of coverage chosen by the worker.", values: "`Employee Only`, `Employee + Spouse`, `Family`." },
+                { field: "Dependent Name", definition: "The name of a dependent covered under the worker's benefits.", values: "Full name (e.g., `Jane Doe`)." },
+                { field: "Relation to Worker", definition: "The relationship of the dependent to the worker.", values: "`Spouse`, `Child`, `Domestic Partner`." },
+                { field: "Enrollment Date", definition: "The date the worker enrolled in the benefit plan.", values: "`YYYY-MM-DD`." },
+                { field: "Premium Amount", definition: "The cost of the benefit plan, often deducted from payroll.", values: "Currency value (e.g., `150.00 USD`)." }
+            ],
+            "Talent Management": [
+                { field: "Goal Name", definition: "A concise title for the goal.", values: "`Increase Sales by 10%`, `Complete Project X`, `Develop Leadership Skills`." },
+                { field: "Goal Type", definition: "The categorization of the goal.", values: "`Business Goal`, `Development Goal`, `Performance Goal`." },
+                { field: "Due Date", definition: "The target completion date for the goal.", values: "`YYYY-MM-DD`." },
+                { field: "Goal Status", definition: "The current progress status of the goal.", values: "`Not Started`, `In Progress`, `Completed`, `Achieved`, `At Risk`." },
+                { field: "Measurement Type", definition: "How the goal's progress is measured.", values: "`Percentage`, `Number`, `Currency`, `Boolean (Yes/No)`, `Text`." },
+                { field: "Target Value", definition: "The desired outcome for the goal.", values: "`10%`, `500`, `10000 USD`, `Yes`, `Completed Report`." },
+                { field: "Actual Value", definition: "The current progress achieved towards the goal.", values: "`5%`, `250`, `5000 USD`, `No`, `Draft Report`." },
+                { field: "Performance Document", definition: "The overall performance review document.", values: "`Annual Performance Review 2024`, `Mid-Year Check-in`." },
+                { field: "Review Period", definition: "The period covered by the performance review.", values: "`Jan 1 - Dec 31, 2024`, `Q2 2024`." },
+                { field: "Overall Rating", definition: "The final overall performance rating for the worker.", values: "`Exceeds Expectations`, `Meets Expectations`, `Needs Improvement`, `Does Not Meet Expectations`." },
+                { field: "Rating Model", definition: "The scale or framework used for ratings.", values: "`5-Point Scale`, `3-Point Scale`, `Exceeds/Meets/Needs`." },
+                { field: "Reviewer Name", definition: "The name of the person conducting the review (e.g., manager).", values: "Full name (e.g., `Jane Smith`)." },
+                { field: "Employee Comments", definition: "Comments provided by the employee during the review process.", values: "Free text." },
+                { field: "Manager Comments", definition: "Comments provided by the manager during the review process.", values: "Free text." },
+                { field: "Course Name", definition: "The title of the learning course.", values: "`Project Management Fundamentals`, `Effective Communication`, `Data Analysis Basics`." },
+                { field: "Learning Type", definition: "The format or category of the learning.", values: "`E-Learning`, `Classroom`, `Virtual Class`, `On-the-Job Training`." },
+                { field: "Completion Status", definition: "The worker's completion status for a learning item.", values: "`Not Started`, `In Progress`, `Completed`, `Assigned`, `Withdrawn`." },
+                { field: "Completion Date", definition: "The date the worker completed the learning item.", values: "`YYYY-MM-DD`." },
+                { field: "Learning Assignment", definition: "A specific instance of a course assigned to a worker.", values: "System-generated ID or descriptive name." }
+            ],
+            "Payroll": [
+                { field: "Payroll Unit", definition: "The specific payroll run or frequency.", values: "`Bi-Weekly`, `Monthly`, `Semi-Monthly`." },
+                { field: "Payroll Period", definition: "The start and end dates of a specific payroll run.", values: "`2024-06-01 to 2024-06-15`." },
+                { field: "Element Name", definition: "A specific component of pay or deduction.", values: "`Regular Salary`, `Bonus`, `Overtime Pay`, `Health Insurance Deduction`, `401K Contribution`, `Tax`." },
+                { field: "Element Type", definition: "The classification of the payroll element.", values: "`Earnings`, `Deduction`, `Information`." },
+                { field: "Amount", definition: "The monetary value associated with a payroll element.", values: "Currency value (e.g., `2500.00 USD`, `-50.00 USD`)." },
+                { field: "Gross Pay", definition: "Total earnings before deductions.", values: "Currency value." },
+                { field: "Net Pay", definition: "Total pay after all deductions.", values: "Currency value." },
+                { field: "Payment Method", definition: "How the worker receives their pay.", values: "`Direct Deposit`, `Check`." },
+                { field: "Bank Account Number", definition: "The worker's bank account number for direct deposit.", values: "Numeric string." },
+                { field: "Routing Number", definition: "The bank's routing number for direct deposit.", values: "Numeric string." },
+                { field: "Tax Filing Status", definition: "The worker's tax filing status.", values: "`Single`, `Married Filing Jointly`, `Head of Household`." },
+                { field: "Tax Withholding Allowances", definition: "The number of allowances claimed for tax withholding.", values: "Numeric value (e.g., `0`, `1`, `2`)." }
+            ]
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const navContainer = document.getElementById('module-nav');
+            const contentContainer = document.getElementById('content-container');
+            const searchInput = document.getElementById('searchInput');
+            const addFieldButton = document.getElementById('addFieldButton');
+            const fieldModal = document.getElementById('fieldModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const fieldForm = document.getElementById('fieldForm');
+            const fieldNameInput = document.getElementById('fieldName');
+            const fieldDefinitionInput = document.getElementById('fieldDefinition');
+            const fieldValuesInput = document.getElementById('fieldValues');
+            const editIndexInput = document.getElementById('editIndex');
+            const cancelModalButton = document.getElementById('cancelModalButton');
+            
+            let activeModule = Object.keys(hcmData)[0];
+
+            function render() {
+                navContainer.innerHTML = '';
+                contentContainer.innerHTML = '';
+
+                Object.keys(hcmData).forEach(moduleName => {
+                    // Create Nav Button
+                    const button = document.createElement('button');
+                    button.textContent = moduleName;
+                    button.dataset.module = moduleName;
+                    button.className = `px-4 py-2 text-sm font-semibold rounded-full transition-colors duration-200 ${moduleName === activeModule ? 'bg-sky-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-200'}`;
+                    navContainer.appendChild(button);
+
+                    // Create Content Table
+                    const contentDiv = document.createElement('div');
+                    contentDiv.id = `content-${moduleName.replace(/[^a-zA-Z0-9]/g, '-')}`;
+                    contentDiv.className = `module-content ${moduleName === activeModule ? '' : 'hidden'}`;
+                    
+                    const tableContainer = document.createElement('div');
+                    tableContainer.className = 'table-container overflow-x-auto overflow-y-auto bg-white rounded-lg shadow-md border border-slate-200 max-h-[60vh]';
+
+                    const table = document.createElement('table');
+                    table.className = 'w-full text-left text-sm data-table';
+
+                    table.innerHTML = `
+                        <thead class="bg-slate-100 text-slate-600 uppercase tracking-wider">
+                            <tr>
+                                <th class="w-1/4">Field Name</th>
+                                <th class="w-1/2">Definition</th>
+                                <th class="w-1/4">Possible Values / Examples</th>
+                                <th class="w-[100px]">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${hcmData[moduleName].map((row, index) => `
+                                <tr class="border-b border-slate-200 hover:bg-slate-50">
+                                    <td class="font-semibold text-slate-900">${row.field}</td>
+                                    <td>${row.definition}</td>
+                                    <td class="text-slate-600 font-mono text-xs">${row.values.replace(/`/g, '<code class="bg-slate-200 text-slate-800 rounded px-1 py-0.5">').replace(/,/g, ', ')}</td>
+                                    <td>
+                                        <div class="flex gap-1 justify-center">
+                                            <button data-action="edit" data-index="${index}" class="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors">Edit</button>
+                                            <button data-action="delete" data-index="${index}" class="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition-colors">Delete</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                             <tr class="hidden no-results-row"><td colspan="4" class="text-center py-8 text-slate-500">No results found.</td></tr>
+                        </tbody>
+                    `;
+                    
+                    tableContainer.appendChild(table);
+                    contentDiv.appendChild(tableContainer);
+                    contentContainer.appendChild(contentDiv);
+                });
+            }
+
+            function handleNavClick(e) {
+                if (e.target.tagName === 'BUTTON' && e.target.dataset.module) {
+                    activeModule = e.target.dataset.module;
+                    searchInput.value = ''; // Clear search on tab switch
+                    render();
+                    handleSearch(); // Apply empty search to show all rows
+                }
+            }
+            
+            function handleSearch() {
+                const searchTerm = searchInput.value.toLowerCase();
+                const activeContentId = `content-${activeModule.replace(/[^a-zA-Z0-9]/g, '-')}`;
+                const activeTable = document.querySelector(`#${activeContentId} table tbody`);
+                
+                if (!activeTable) return;
+
+                const rows = activeTable.querySelectorAll('tr:not(.no-results-row)');
+                let visibleRows = 0;
+                rows.forEach(row => {
+                    const fieldCell = row.cells[0].textContent.toLowerCase();
+                    const definitionCell = row.cells[1].textContent.toLowerCase();
+                    if (fieldCell.includes(searchTerm) || definitionCell.includes(searchTerm)) {
+                        row.classList.remove('hidden');
+                        visibleRows++;
+                    } else {
+                        row.classList.add('hidden');
+                    }
+                });
+                
+                const noResultsRow = activeTable.querySelector('.no-results-row');
+                if (visibleRows === 0) {
+                    noResultsRow.classList.remove('hidden');
+                } else {
+                    noResultsRow.classList.add('hidden');
+                }
+            }
+
+            function openModal(isEdit = false, index = null) {
+                fieldForm.reset();
+                if (isEdit && index !== null) {
+                    modalTitle.textContent = 'Edit Field';
+                    const fieldData = hcmData[activeModule][index];
+                    fieldNameInput.value = fieldData.field;
+                    fieldDefinitionInput.value = fieldData.definition;
+                    fieldValuesInput.value = fieldData.values;
+                    editIndexInput.value = index;
+                } else {
+                    modalTitle.textContent = 'Add New Field';
+                    editIndexInput.value = ''; // Ensure no index for new additions
+                }
+                fieldModal.classList.remove('hidden');
+            }
+
+            function closeModal() {
+                fieldModal.classList.add('hidden');
+            }
+
+            function saveField(event) {
+                event.preventDefault();
+                const field = fieldNameInput.value.trim();
+                const definition = fieldDefinitionInput.value.trim();
+                const values = fieldValuesInput.value.trim();
+                const index = editIndexInput.value;
+
+                if (!field || !definition) {
+                    // Basic validation
+                    return;
+                }
+
+                const newField = { field, definition, values };
+
+                if (index !== '') {
+                    // Edit existing field
+                    hcmData[activeModule][parseInt(index)] = newField;
+                } else {
+                    // Add new field
+                    hcmData[activeModule].push(newField);
+                }
+                closeModal();
+                render();
+                handleSearch(); // Reapply search filter
+            }
+
+            function deleteField(index) {
+                if (confirm('Are you sure you want to delete this field?')) {
+                    hcmData[activeModule].splice(index, 1);
+                    render();
+                    handleSearch(); // Reapply search filter
+                }
+            }
+
+            // Event Listeners
+            navContainer.addEventListener('click', handleNavClick);
+            searchInput.addEventListener('keyup', handleSearch);
+            addFieldButton.addEventListener('click', () => openModal(false));
+            cancelModalButton.addEventListener('click', closeModal);
+            fieldForm.addEventListener('submit', saveField);
+
+            contentContainer.addEventListener('click', (e) => {
+                const target = e.target;
+                if (target.tagName === 'BUTTON' && target.dataset.action) {
+                    const index = parseInt(target.dataset.index);
+                    if (target.dataset.action === 'edit') {
+                        openModal(true, index);
+                    } else if (target.dataset.action === 'delete') {
+                        deleteField(index);
+                    }
+                }
+            });
+
+            render();
+        });
+    </script>
+</body>
+</html>
